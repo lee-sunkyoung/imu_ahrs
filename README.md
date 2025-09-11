@@ -1,4 +1,4 @@
-# path_planner
+# IMU_AHRS package
 
 This package provides filtering for Attitude, Heading, and Reference System (AHRS) using IMU data.
 
@@ -7,9 +7,11 @@ It implements:
 - **Mahony's algorithm**
 - **Slerp (spherical linear interpolation)**
 
- for smooth quaternion filtering
+ for smooth quaternion filtering.
 
 Additionally, the current IMU orientation can be **visualized in RViz2**.
+
+**Future updates**: EBIMU support, configurable topics and gains via config file, and optional Madgwick filter
 
 - [Topics](#Topics)
 - [Prerequisites](#Prerequisites)
