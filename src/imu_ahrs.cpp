@@ -63,7 +63,7 @@ void ImuAhrs::updateFilter() {
   imu_msg.orientation.y = slerp_.Qy;
   imu_msg.orientation.z = slerp_.Qz;
 
-  std::cout<<slerp_.roll<<" , "<<slerp_.pitch<<" , "<<slerp_.yaw<<" , "<<std::endl;
+  //std::cout<<slerp_.roll<<" , "<<slerp_.pitch<<" , "<<slerp_.yaw<<" , "<<std::endl;
 
   imu_pub_->publish(imu_msg);
   
