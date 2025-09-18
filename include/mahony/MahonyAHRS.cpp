@@ -28,7 +28,7 @@
 // Definitions
 
 #define DEFAULT_SAMPLE_FREQ	100.0f	// sample frequency in Hz
-#define twoKpDef	(2.0f * 50.0f)	// 2 * proportional gain
+#define twoKpDef	(2.0f * 5.0f)	// 2 * proportional gain
 #define twoKiDef	(2.0f * 10.0f)	// 2 * integral gain
 
 

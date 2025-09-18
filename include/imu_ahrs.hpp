@@ -12,6 +12,14 @@
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 
+// #include <tf2_ros/buffer.h>
+// #include <tf2_ros/transform_listener.h>
+// #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
+#include <tf2_eigen/tf2_eigen.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+// #include <geometry_msgs/msg/transform_stamped.hpp>
+
 #include <slerp.hpp>
 
 #include "mahony/MahonyAHRS.h"
@@ -29,6 +37,8 @@ class ImuAhrs : public rclcpp::Node {
   void gyroCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg);
   void magCallback(const sensor_msgs::msg::MagneticField::SharedPtr msg);
   void updateFilter();
+  //void publishTF();
+  void pub_data();
 
  private:
   rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
@@ -36,13 +46,16 @@ class ImuAhrs : public rclcpp::Node {
   rclcpp::Subscription<sensor_msgs::msg::MagneticField>::SharedPtr mag_sub_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr accel_sub_, gyro_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
-
+  rclcpp::TimerBase::SharedPtr timer2_;
+  //std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   mahony::Mahony mahony_;
+  Slerp slerp_;
+  
+  sensor_msgs::msg::Imu imu_msg;
+
   double ax = 0, ay = 0, az = 0;
   double gx = 0, gy = 0, gz = 0;
   double mx = 0, my = 0, mz = 0;
-
-  Slerp slerp_;
 
 };
 
