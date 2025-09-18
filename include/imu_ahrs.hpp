@@ -24,39 +24,43 @@
 
 #include "mahony/MahonyAHRS.h"
 
-namespace imu_ahrs {
+namespace imu_ahrs
+{
 
-class ImuAhrs : public rclcpp::Node {
- public:
-  ImuAhrs();
+  class ImuAhrs : public rclcpp::Node
+  {
+  public:
+    ImuAhrs();
 
- private:
-  void setup();
+  private:
+    void setup();
 
-  void accelCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg);
-  void gyroCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg);
-  void magCallback(const sensor_msgs::msg::MagneticField::SharedPtr msg);
-  void updateFilter();
-  //void publishTF();
-  void pub_data();
+    void accelCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg);
+    void gyroCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg);
+    void magCallback(const sensor_msgs::msg::MagneticField::SharedPtr msg);
+    void updateFilter();
+    // void publishTF();
+    void pub_data();
 
- private:
-  rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
-  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
-  rclcpp::Subscription<sensor_msgs::msg::MagneticField>::SharedPtr mag_sub_;
-  rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr accel_sub_, gyro_sub_;
-  rclcpp::TimerBase::SharedPtr timer_;
-  rclcpp::TimerBase::SharedPtr timer2_;
-  //std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-  mahony::Mahony mahony_;
-  Slerp slerp_;
-  
-  sensor_msgs::msg::Imu imu_msg;
+  private:
+    rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
+    rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr pose_pub_;
+    rclcpp::Subscription<sensor_msgs::msg::MagneticField>::SharedPtr mag_sub_;
+    rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr accel_sub_, gyro_sub_;
+    rclcpp::TimerBase::SharedPtr timer_;
+    rclcpp::TimerBase::SharedPtr timer2_;
+    // std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+    mahony::Mahony mahony_;
+    Slerp slerp_;
 
-  double ax = 0, ay = 0, az = 0;
-  double gx = 0, gy = 0, gz = 0;
-  double mx = 0, my = 0, mz = 0;
+    sensor_msgs::msg::Imu imu_msg;
 
-};
+    double ax = 0, ay = 0, az = 0;
+    double gx = 0, gy = 0, gz = 0;
+    double mx = 0, my = 0, mz = 0;
+    
+    bool yaw_initialized_ = false;
+    double initial_yaw_ = 0.0;
+  };
 
-}  // namespace imu_ahrs
+} // namespace imu_ahrs

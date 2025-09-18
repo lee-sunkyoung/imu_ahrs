@@ -34,8 +34,8 @@ namespace imu_ahrs
   }
   void ImuAhrs::accelCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
   {
-    ax = msg->vector.x;
-    ay = msg->vector.y;
+    ax = msg->vector.x - 0.23;
+    ay = msg->vector.y - 0.25;
     az = msg->vector.z;
   }
 
@@ -60,9 +60,9 @@ namespace imu_ahrs
     imu_msg.header.stamp = this->get_clock()->now();
     imu_msg.header.frame_id = "imu_link";
 
-    imu_msg.angular_velocity.x = gx;
-    imu_msg.angular_velocity.y = gy;
-    imu_msg.angular_velocity.z = gz;
+    imu_msg.angular_velocity.x = static_cast<float>((std::abs(gx) < 0.1) ? 0.0 : gx);
+    imu_msg.angular_velocity.y = static_cast<float>((std::abs(gy) < 0.1) ? 0.0 : gy);
+    imu_msg.angular_velocity.z = static_cast<float>((std::abs(gz) < 0.1) ? 0.0 : gz);
 
     imu_msg.linear_acceleration.x = ax;
     imu_msg.linear_acceleration.y = ay;
@@ -83,6 +83,31 @@ namespace imu_ahrs
     imu_msg.linear_acceleration_covariance[8] = 0.0008;
     // std::cout<<slerp_.roll<<" , "<<slerp_.pitch<<" , "<<slerp_.yaw<<" , "<<std::endl;
 
+    tf2::Quaternion q(
+        slerp_.Qx,
+        slerp_.Qy,
+        slerp_.Qz,
+        slerp_.Qw);
+
+    // 쿼터니언을 roll, pitch, yaw로 변환
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
+
+    if (!yaw_initialized_)
+    {
+      initial_yaw_ = yaw; // 첫 yaw 저장
+      yaw_initialized_ = true;
+    }
+
+    // yaw를 초기 yaw에 대해 상대값으로 만들기 (즉, 시작시 yaw=0)
+    yaw -= initial_yaw_;
+
+    tf2::Quaternion q_fixed;
+    q_fixed.setRPY(roll, pitch, yaw);
+    q_fixed.normalize();
+
+    imu_msg.orientation = tf2::toMsg(q_fixed);
+
     // imu_msg.orientation 쿼터니언을 tf2::Quaternion으로 변환
     sensor_msgs::msg::Imu buf_msg;
     buf_msg = imu_msg;
@@ -100,18 +125,14 @@ namespace imu_ahrs
     tf2::Vector3 gravity_imu = tf2::quatRotate(orientation, gravity_earth);
 
     // 원래 가속도에서 중력 성분 제거
-    double ax = imu_msg.linear_acceleration.x;
-    double ay = imu_msg.linear_acceleration.y;
-    double az = imu_msg.linear_acceleration.z;
-
     double acc_x = ax - gravity_imu.x();
     double acc_y = ay - gravity_imu.y();
     double acc_z = az - gravity_imu.z();
 
     // 보정된 가속도 다시 imu_msg에 저장
-    imu_msg.linear_acceleration.x = static_cast<float>((std::abs(acc_x) < 0.2) ? 0.0 : acc_x);
-    imu_msg.linear_acceleration.y = static_cast<float>((std::abs(acc_y) < 0.2) ? 0.0 : acc_y);
-    imu_msg.linear_acceleration.z = static_cast<float>((std::abs(acc_z) < 0.2) ? 0.0 : acc_z);
+    imu_msg.linear_acceleration.x = 0.0;//static_cast<float>((std::abs(acc_x) < 0.5) ? 0.0 : acc_x);
+    imu_msg.linear_acceleration.y = 0.0;//static_cast<float>((std::abs(acc_y) < 0.5) ? 0.0 : acc_y);
+    imu_msg.linear_acceleration.z = 0.0;//static_cast<float>((std::abs(acc_z) < 0.5) ? 0.0 : acc_z);
 
     geometry_msgs::msg::PoseStamped pose_msg;
     pose_msg.header.stamp = this->get_clock()->now();
