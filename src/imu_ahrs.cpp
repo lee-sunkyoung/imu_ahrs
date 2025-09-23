@@ -57,89 +57,6 @@ namespace imu_ahrs
     mz = msg->magnetic_field.z;
   }
 
-  // void ImuAhrs::updateFilter()
-  // {
-  //   // ── Mahony 업데이트 ─────────────────────────────
-  //   // Xsens gyro는 rad/s → Mahony가 내부에서 deg→rad 하므로 deg/s로 변환해서 넣는다.
-  //   constexpr double RAD2DEG = 180.0 / M_PI;
-  //   float gx_deg = static_cast<float>(gx * RAD2DEG);
-  //   float gy_deg = static_cast<float>(gy * RAD2DEG);
-  //   float gz_deg = static_cast<float>(gz * RAD2DEG);
-
-  //   // mag은 그대로(필요시 켜서 사용); acc는 SI 단위(m/s^2)여도 Mahony는 정규화하므로 OK
-  //   mahony_.update(gx_deg, gy_deg, gz_deg,
-  //                  static_cast<float>(ax), static_cast<float>(ay), static_cast<float>(az),
-  //                  static_cast<float>(mx), static_cast<float>(my), static_cast<float>(mz));
-
-  //   slerp_.calc(mahony_.q0, mahony_.q1, mahony_.q2, mahony_.q3);
-
-  //   // ── 메시지 채우기 ───────────────────────────────
-  //   imu_msg.header.stamp = this->get_clock()->now();
-  //   imu_msg.header.frame_id = "imu_link";
-
-  //   // ROS 규격은 rad/s → 드라이버 원본(rad/s)을 그대로 사용
-  //   imu_msg.angular_velocity.x = std::abs(gx) < 1e-3 ? 0.0 : gx;
-  //   imu_msg.angular_velocity.y = std::abs(gy) < 1e-3 ? 0.0 : gy;
-  //   imu_msg.angular_velocity.z = std::abs(gz) < 1e-3 ? 0.0 : gz;
-
-  //   imu_msg.linear_acceleration.x = ax;
-  //   imu_msg.linear_acceleration.y = ay;
-  //   imu_msg.linear_acceleration.z = az;
-
-  //   // 공분산은 네가 쓰던 값 유지 가능
-  //   imu_msg.orientation_covariance[0] = 0.0005; // roll
-  //   imu_msg.orientation_covariance[4] = 0.0005; // pitch
-  //   imu_msg.orientation_covariance[8] = 0.001;  // yaw
-  //   imu_msg.angular_velocity_covariance[0] = 0.0001;
-  //   imu_msg.angular_velocity_covariance[4] = 0.0001;
-  //   imu_msg.angular_velocity_covariance[8] = 0.0001;
-  //   imu_msg.linear_acceleration_covariance[0] = 0.0005;
-  //   imu_msg.linear_acceleration_covariance[4] = 0.0005;
-  //   imu_msg.linear_acceleration_covariance[8] = 0.0008;
-
-  //   // 초기 yaw 고정은 기존처럼(쿼터니언 곱만 사용)
-  //   tf2::Quaternion qout(slerp_.Qx, slerp_.Qy, slerp_.Qz, slerp_.Qw);
-  //   if (!yaw_initialized_ && warming_up++ >= 300)
-  //   {
-  //     double r, p, y;
-  //     tf2::Matrix3x3(qout).getRPY(r, p, y);
-  //     initial_yaw_ = y;
-  //     yaw_initialized_ = true;
-  //   }
-  //   tf2::Quaternion q_out = qout;
-  //   if (yaw_initialized_)
-  //   {
-  //     tf2::Quaternion q_off;
-  //     q_off.setRPY(0, 0, -initial_yaw_);
-  //     q_out = q_off * qout;
-  //     q_out.normalize();
-  //   }
-  //   // 쿼터니언 부호 고정(시각적 튐 방지)
-  //   if (q_out.w() < 0)
-  //     q_out = tf2::Quaternion(-q_out.x(), -q_out.y(), -q_out.z(), -q_out.w());
-
-  //   imu_msg.orientation = tf2::toMsg(q_out);
-
-  //   // 맵핑용 옵션
-  //   if (!use_linear_acc)
-  //   {
-  //     imu_msg.linear_acceleration.x = 0.0;
-  //     imu_msg.linear_acceleration.y = 0.0;
-  //     imu_msg.linear_acceleration.z = 0.0;
-  //   }
-
-  //   // (옵션) 헤딩 1Hz 출력
-  //   // double r,p,y; tf2::Matrix3x3(qout).getRPY(r,p,y);
-  //   // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
-  //   //   "Heading: %.2f deg", y * 180.0/M_PI);
-
-  //   // Pose 퍼블리시
-  //   geometry_msgs::msg::PoseStamped pose_msg;
-  //   pose_msg.header.stamp = this->get_clock()->now();
-  //   pose_msg.header.frame_id = "velodyne"; // 시각화 프레임 주의
-  //   pose_msg.pose.orientation = imu_msg.orientation;
-  //   pose_pub_->publish(pose_msg);
-  // }
   void ImuAhrs::updateFilter()
   {
     // 1Hz로 드리프트 없는 상태에서 평균 찍기
@@ -147,7 +64,6 @@ namespace imu_ahrs
                          "gyro (raw): %.5f %.5f %.5f [units?]", gx, gy, gz);
 
     // ====== 1) 상태/게이트 판단 ======
-    // Xsens 드라이버의 /imu/angular_velocity 는 보통 rad/s (SI). 실제 단위 확인 필수!
     // 정지 판정: 자이로(각속도) + 가속도 크기(g) 근처를 함께 체크
     constexpr double G = 9.81;
     constexpr double STILL_GYR_THR = 0.0087; // rad/s ≈ 0.5 deg/s
@@ -172,18 +88,17 @@ namespace imu_ahrs
     } // 비정상일 땐 IMU 모드로 (Mahony가 자동 처리)
 
     // ====== 2) Mahony 입력 준비 (deg/s로) ======
-    // Mahony 구현이 내부에서 deg->rad를 다시 곱하므로, 입력은 deg/s가 맞다.
-    // (Xsens에서 gx,gy,gz가 rad/s라 가정하고 deg/s로 변환)
-    constexpr double RAD2DEG = 180.0 / M_PI;
-    float gx_deg = static_cast<float>(gx * RAD2DEG);
-    float gy_deg = static_cast<float>(gy * RAD2DEG);
-    float gz_deg = static_cast<float>(gz * RAD2DEG);
+    // Mahony 내부에서 deg->rad, 입력은 deg/s
+    //constexpr double RAD2DEG = 180.0 / M_PI;
+    float gx_deg = static_cast<float>(gx); // * RAD2DEG
+    float gy_deg = static_cast<float>(gy); // * RAD2DEG
+    float gz_deg = static_cast<float>(gz); // * RAD2DEG
 
     // ZARU: 정지 상태일 때는 각속도 적분을 막아 드리프트 억제 (yaw 주로, 원하면 x,y도 0)
     if (still)
     {
       // yaw 드리프트 억제 목적이면 gz만 0으로 둬도 충분. 필요시 아래 두 줄도 0으로.
-      // gx_deg = 0.0f; gy_deg = 0.0f;
+      gx_deg = 0.0f; gy_deg = 0.0f;
       gz_deg = 0.0f;
     }
 
