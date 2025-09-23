@@ -12,13 +12,18 @@ def generate_launch_description():
         'launch',
         'xsens_mti_node.launch.py'
     )
-
+    imu_ahrs_param_path = os.path.join(
+        get_package_share_directory('imu_ahrs'),
+        'config',
+        'params.yaml'
+    )
     return LaunchDescription([
         Node(
             package='imu_ahrs',
             executable='imu_ahrs',
             name='imu_ahrs',
-            output='screen'
+            output='screen',
+            parameters=[imu_ahrs_param_path]
         ),
 
         IncludeLaunchDescription(

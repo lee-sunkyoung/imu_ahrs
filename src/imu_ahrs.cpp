@@ -6,8 +6,8 @@ namespace imu_ahrs
 
   ImuAhrs::ImuAhrs() : Node("imu_ahrs")
   {
+    this->declare_parameter<bool>("use_linear_acc", false);
     this->setup();
-    // tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
   }
 
   void ImuAhrs::setup()
@@ -30,12 +30,16 @@ namespace imu_ahrs
                                      std::bind(&ImuAhrs::updateFilter, this));
     timer2_ = this->create_wall_timer(std::chrono::milliseconds(10),
                                       std::bind(&ImuAhrs::pub_data, this));
-    mahony_.begin(10); // 10 Hz
+    this->get_parameter("use_linear_acc", use_linear_acc);
+    RCLCPP_INFO(this->get_logger(), "use_linear_acc: %s",
+                use_linear_acc ? "true" : "false");
+
+    mahony_.begin(100); // 10 Hz
   }
   void ImuAhrs::accelCallback(const geometry_msgs::msg::Vector3Stamped::SharedPtr msg)
   {
-    ax = msg->vector.x - 0.23;
-    ay = msg->vector.y - 0.25;
+    ax = msg->vector.x;
+    ay = msg->vector.y;
     az = msg->vector.z;
   }
 
@@ -52,133 +56,220 @@ namespace imu_ahrs
     my = msg->magnetic_field.y;
     mz = msg->magnetic_field.z;
   }
+
+  // void ImuAhrs::updateFilter()
+  // {
+  //   // ── Mahony 업데이트 ─────────────────────────────
+  //   // Xsens gyro는 rad/s → Mahony가 내부에서 deg→rad 하므로 deg/s로 변환해서 넣는다.
+  //   constexpr double RAD2DEG = 180.0 / M_PI;
+  //   float gx_deg = static_cast<float>(gx * RAD2DEG);
+  //   float gy_deg = static_cast<float>(gy * RAD2DEG);
+  //   float gz_deg = static_cast<float>(gz * RAD2DEG);
+
+  //   // mag은 그대로(필요시 켜서 사용); acc는 SI 단위(m/s^2)여도 Mahony는 정규화하므로 OK
+  //   mahony_.update(gx_deg, gy_deg, gz_deg,
+  //                  static_cast<float>(ax), static_cast<float>(ay), static_cast<float>(az),
+  //                  static_cast<float>(mx), static_cast<float>(my), static_cast<float>(mz));
+
+  //   slerp_.calc(mahony_.q0, mahony_.q1, mahony_.q2, mahony_.q3);
+
+  //   // ── 메시지 채우기 ───────────────────────────────
+  //   imu_msg.header.stamp = this->get_clock()->now();
+  //   imu_msg.header.frame_id = "imu_link";
+
+  //   // ROS 규격은 rad/s → 드라이버 원본(rad/s)을 그대로 사용
+  //   imu_msg.angular_velocity.x = std::abs(gx) < 1e-3 ? 0.0 : gx;
+  //   imu_msg.angular_velocity.y = std::abs(gy) < 1e-3 ? 0.0 : gy;
+  //   imu_msg.angular_velocity.z = std::abs(gz) < 1e-3 ? 0.0 : gz;
+
+  //   imu_msg.linear_acceleration.x = ax;
+  //   imu_msg.linear_acceleration.y = ay;
+  //   imu_msg.linear_acceleration.z = az;
+
+  //   // 공분산은 네가 쓰던 값 유지 가능
+  //   imu_msg.orientation_covariance[0] = 0.0005; // roll
+  //   imu_msg.orientation_covariance[4] = 0.0005; // pitch
+  //   imu_msg.orientation_covariance[8] = 0.001;  // yaw
+  //   imu_msg.angular_velocity_covariance[0] = 0.0001;
+  //   imu_msg.angular_velocity_covariance[4] = 0.0001;
+  //   imu_msg.angular_velocity_covariance[8] = 0.0001;
+  //   imu_msg.linear_acceleration_covariance[0] = 0.0005;
+  //   imu_msg.linear_acceleration_covariance[4] = 0.0005;
+  //   imu_msg.linear_acceleration_covariance[8] = 0.0008;
+
+  //   // 초기 yaw 고정은 기존처럼(쿼터니언 곱만 사용)
+  //   tf2::Quaternion qout(slerp_.Qx, slerp_.Qy, slerp_.Qz, slerp_.Qw);
+  //   if (!yaw_initialized_ && warming_up++ >= 300)
+  //   {
+  //     double r, p, y;
+  //     tf2::Matrix3x3(qout).getRPY(r, p, y);
+  //     initial_yaw_ = y;
+  //     yaw_initialized_ = true;
+  //   }
+  //   tf2::Quaternion q_out = qout;
+  //   if (yaw_initialized_)
+  //   {
+  //     tf2::Quaternion q_off;
+  //     q_off.setRPY(0, 0, -initial_yaw_);
+  //     q_out = q_off * qout;
+  //     q_out.normalize();
+  //   }
+  //   // 쿼터니언 부호 고정(시각적 튐 방지)
+  //   if (q_out.w() < 0)
+  //     q_out = tf2::Quaternion(-q_out.x(), -q_out.y(), -q_out.z(), -q_out.w());
+
+  //   imu_msg.orientation = tf2::toMsg(q_out);
+
+  //   // 맵핑용 옵션
+  //   if (!use_linear_acc)
+  //   {
+  //     imu_msg.linear_acceleration.x = 0.0;
+  //     imu_msg.linear_acceleration.y = 0.0;
+  //     imu_msg.linear_acceleration.z = 0.0;
+  //   }
+
+  //   // (옵션) 헤딩 1Hz 출력
+  //   // double r,p,y; tf2::Matrix3x3(qout).getRPY(r,p,y);
+  //   // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+  //   //   "Heading: %.2f deg", y * 180.0/M_PI);
+
+  //   // Pose 퍼블리시
+  //   geometry_msgs::msg::PoseStamped pose_msg;
+  //   pose_msg.header.stamp = this->get_clock()->now();
+  //   pose_msg.header.frame_id = "velodyne"; // 시각화 프레임 주의
+  //   pose_msg.pose.orientation = imu_msg.orientation;
+  //   pose_pub_->publish(pose_msg);
+  // }
   void ImuAhrs::updateFilter()
   {
-    mahony_.update(gx, gy, gz, ax, ay, az, mx, my, mz);
-    slerp_.calc(mahony_.q0, mahony_.q1, mahony_.q2, mahony_.q3);
+    // 1Hz로 드리프트 없는 상태에서 평균 찍기
+    RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                         "gyro (raw): %.5f %.5f %.5f [units?]", gx, gy, gz);
 
+    // ====== 1) 상태/게이트 판단 ======
+    // Xsens 드라이버의 /imu/angular_velocity 는 보통 rad/s (SI). 실제 단위 확인 필수!
+    // 정지 판정: 자이로(각속도) + 가속도 크기(g) 근처를 함께 체크
+    constexpr double G = 9.81;
+    constexpr double STILL_GYR_THR = 0.0087; // rad/s ≈ 0.5 deg/s
+    constexpr double STILL_ACC_THR = 0.15;   // m/s^2, |a|-g 허용 오차
+
+    const bool still_gyr = (std::abs(gx) + std::abs(gy) + std::abs(gz)) < STILL_GYR_THR;
+    const double anorm = std::sqrt(ax * ax + ay * ay + az * az);
+    const bool still_acc = std::abs(anorm - G) < STILL_ACC_THR;
+    const bool still = still_gyr && still_acc;
+
+    // 자기장 게이팅: MagneticField.msg 단위는 Tesla
+    // 지구 자기장 크기: 대략 25~65 μT 범위
+    float mmx = static_cast<float>(mx);
+    float mmy = static_cast<float>(my);
+    float mmz = static_cast<float>(mz);
+    const float B_MIN = 25e-6f, B_MAX = 65e-6f;
+    const float bnorm = std::sqrt(mmx * mmx + mmy * mmy + mmz * mmz);
+    bool mag_ok = (bnorm > B_MIN && bnorm < B_MAX);
+    if (!mag_ok)
+    {
+      mmx = mmy = mmz = 0.0f;
+    } // 비정상일 땐 IMU 모드로 (Mahony가 자동 처리)
+
+    // ====== 2) Mahony 입력 준비 (deg/s로) ======
+    // Mahony 구현이 내부에서 deg->rad를 다시 곱하므로, 입력은 deg/s가 맞다.
+    // (Xsens에서 gx,gy,gz가 rad/s라 가정하고 deg/s로 변환)
+    constexpr double RAD2DEG = 180.0 / M_PI;
+    float gx_deg = static_cast<float>(gx * RAD2DEG);
+    float gy_deg = static_cast<float>(gy * RAD2DEG);
+    float gz_deg = static_cast<float>(gz * RAD2DEG);
+
+    // ZARU: 정지 상태일 때는 각속도 적분을 막아 드리프트 억제 (yaw 주로, 원하면 x,y도 0)
+    if (still)
+    {
+      // yaw 드리프트 억제 목적이면 gz만 0으로 둬도 충분. 필요시 아래 두 줄도 0으로.
+      // gx_deg = 0.0f; gy_deg = 0.0f;
+      gz_deg = 0.0f;
+    }
+
+    // ====== 3) 필터 업데이트 ======
+    mahony_.update(gx_deg, gy_deg, gz_deg,
+                   static_cast<float>(ax), static_cast<float>(ay), static_cast<float>(az),
+                   mmx, mmy, mmz);
+    //slerp_.calc(mahony_.q0, mahony_.q1, mahony_.q2, mahony_.q3);
+    // ====== 4) 메시지 채우기 ======
     imu_msg.header.stamp = this->get_clock()->now();
     imu_msg.header.frame_id = "imu_link";
 
-    imu_msg.angular_velocity.x = static_cast<float>((std::abs(gx) < 0.1) ? 0.0 : gx);
-    imu_msg.angular_velocity.y = static_cast<float>((std::abs(gy) < 0.1) ? 0.0 : gy);
-    imu_msg.angular_velocity.z = static_cast<float>((std::abs(gz) < 0.1) ? 0.0 : gz);
+    // ROS 규격은 rad/s → 드라이버 원본(rad/s)을 그대로 사용 (퍼블리시 값은 보정하지 않음)
+    imu_msg.angular_velocity.x = std::abs(gx) < 1e-3 ? 0.0 : gx;
+    imu_msg.angular_velocity.y = std::abs(gy) < 1e-3 ? 0.0 : gy;
+    imu_msg.angular_velocity.z = std::abs(gz) < 1e-3 ? 0.0 : gz;
 
     imu_msg.linear_acceleration.x = ax;
     imu_msg.linear_acceleration.y = ay;
     imu_msg.linear_acceleration.z = az;
 
-    imu_msg.orientation.w = slerp_.Qw;
-    imu_msg.orientation.x = slerp_.Qx;
-    imu_msg.orientation.y = slerp_.Qy;
-    imu_msg.orientation.z = slerp_.Qz;
     imu_msg.orientation_covariance[0] = 0.0005; // roll
     imu_msg.orientation_covariance[4] = 0.0005; // pitch
-    imu_msg.orientation_covariance[8] = 0.001;  // yaw (slightly more uncertain)
+    imu_msg.orientation_covariance[8] = 0.001;  // yaw
     imu_msg.angular_velocity_covariance[0] = 0.0001;
     imu_msg.angular_velocity_covariance[4] = 0.0001;
     imu_msg.angular_velocity_covariance[8] = 0.0001;
     imu_msg.linear_acceleration_covariance[0] = 0.0005;
     imu_msg.linear_acceleration_covariance[4] = 0.0005;
     imu_msg.linear_acceleration_covariance[8] = 0.0008;
-    // std::cout<<slerp_.roll<<" , "<<slerp_.pitch<<" , "<<slerp_.yaw<<" , "<<std::endl;
 
-    tf2::Quaternion q(
-        slerp_.Qx,
-        slerp_.Qy,
-        slerp_.Qz,
-        slerp_.Qw);
-
-    // 쿼터니언을 roll, pitch, yaw로 변환
-    double roll, pitch, yaw;
-    tf2::Matrix3x3(q).getRPY(roll, pitch, yaw);
-
-    if (!yaw_initialized_)
+    // ====== 5) yaw 초기 기준(0) 맞추기 ======
+    tf2::Quaternion qout(mahony_.q1, mahony_.q2, mahony_.q3, mahony_.q0);
+    if (!yaw_initialized_ && warming_up++ >= 300)
     {
-      initial_yaw_ = yaw; // 첫 yaw 저장
+      double r, p, y;
+      tf2::Matrix3x3(qout).getRPY(r, p, y);
+      initial_yaw_ = y;
       yaw_initialized_ = true;
     }
+    tf2::Quaternion q_out = qout;
+    if (yaw_initialized_)
+    {
+      tf2::Quaternion q_off;
+      q_off.setRPY(0, 0, -initial_yaw_);
+      q_out = q_off * qout;
+      q_out.normalize();
+    }
 
-    // yaw를 초기 yaw에 대해 상대값으로 만들기 (즉, 시작시 yaw=0)
-    yaw -= initial_yaw_;
+    // 쿼터니언 부호 고정(시각적 튐 방지)
+    if (q_out.w() < 0)
+    {
+      q_out = tf2::Quaternion(-q_out.x(), -q_out.y(), -q_out.z(), -q_out.w());
+    }
 
-    tf2::Quaternion q_fixed;
-    q_fixed.setRPY(roll, pitch, yaw);
-    q_fixed.normalize();
+    imu_msg.orientation = tf2::toMsg(q_out);
 
-    imu_msg.orientation = tf2::toMsg(q_fixed);
+    // 맵핑 옵션
+    if (!use_linear_acc)
+    {
+      imu_msg.linear_acceleration.x = 0.0;
+      imu_msg.linear_acceleration.y = 0.0;
+      imu_msg.linear_acceleration.z = 0.0;
+    }
 
-    // imu_msg.orientation 쿼터니언을 tf2::Quaternion으로 변환
-    sensor_msgs::msg::Imu buf_msg;
-    buf_msg = imu_msg;
-    tf2::Quaternion orientation;
-    tf2::fromMsg(buf_msg.orientation, orientation);
+    // ====== 6) 디버깅: 헤딩 1Hz + 자기 OK 여부/크기 출력 ======
+    {
+      double rr, pp, yy;
+      tf2::Matrix3x3(q_out).getRPY(rr, pp, yy);
+      RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                           "Heading(ENU) %.2f deg (%.3f rad) | still=%d | mag_ok=%d | |B|=%.1f uT",
+                           yy * 180.0 / M_PI, yy, (int)still, (int)mag_ok, bnorm * 1e6f);
+    }
 
-    // 중력 벡터 (지구 중력 가속도)
-    const double g = 9.81;
-
-    // 쿼터니언을 이용해 중력 벡터를 IMU 좌표계로 회전시킴
-    // 중력 벡터는 지구 기준 (0, 0, g)
-    tf2::Vector3 gravity_earth(0, 0, g);
-
-    // 중력 벡터를 IMU 프레임으로 변환 (역방향 회전)
-    tf2::Vector3 gravity_imu = tf2::quatRotate(orientation, gravity_earth);
-
-    // 원래 가속도에서 중력 성분 제거
-    double acc_x = ax - gravity_imu.x();
-    double acc_y = ay - gravity_imu.y();
-    double acc_z = az - gravity_imu.z();
-
-    // 보정된 가속도 다시 imu_msg에 저장
-    imu_msg.linear_acceleration.x = 0.0;//static_cast<float>((std::abs(acc_x) < 0.5) ? 0.0 : acc_x);
-    imu_msg.linear_acceleration.y = 0.0;//static_cast<float>((std::abs(acc_y) < 0.5) ? 0.0 : acc_y);
-    imu_msg.linear_acceleration.z = 0.0;//static_cast<float>((std::abs(acc_z) < 0.5) ? 0.0 : acc_z);
-
+    // ====== 7) Pose 퍼블리시 (시각화 프레임 주의) ======
     geometry_msgs::msg::PoseStamped pose_msg;
     pose_msg.header.stamp = this->get_clock()->now();
-    pose_msg.header.frame_id = "velodyne";
+    pose_msg.header.frame_id = "velodyne"; // RViz TF가 늦게 뜨면 일시적으로 "imu_link"로 보며 확인 권장
     pose_msg.pose.orientation = imu_msg.orientation;
-
     pose_pub_->publish(pose_msg);
-    // double roll, pitch, yaw;
-    // tf2::Quaternion orientation;
-    // tf2::fromMsg(imu_msg.orientation, orientation);
-    // tf2::Matrix3x3(orientation).getRPY(roll, pitch, yaw);
-    // float acc_x = static_cast<float>(imu_msg.linear_acceleration.x) + sin(pitch) * 9.81;
-    // float acc_y = static_cast<float>(imu_msg.linear_acceleration.y) - cos(pitch) * sin(roll) * 9.81;
-    // float acc_z = static_cast<float>(imu_msg.linear_acceleration.z) - cos(pitch) * cos(roll) * 9.81;
-
-    // imu_msg.linear_acceleration.x = acc_x;
-    // imu_msg.linear_acceleration.y = acc_y;
-    // // imu_msg.linear_acceleration.z = acc_z;
-
-    // RCLCPP_INFO(this->get_logger(), "Quat: w=%.4f, x=%.4f, y=%.4f, z=%.4f",
-    // orientation.w(), orientation.x(), orientation.y(), orientation.z());
-
-    // publishTF();
   }
+
   void ImuAhrs::pub_data()
   {
     imu_pub_->publish(imu_msg);
   }
-  // void ImuAhrs::publishTF()
-  // {
-  //   geometry_msgs::msg::TransformStamped t;
-  //   t.header.stamp = this->get_clock() > now();
-  //   t.header.frame_id = "map";
-  //   t.child_frame_id = "odom";
-
-  //   // Set translation & rotation here
-  //   t.transform.translation.x = 0.0;
-  //   t.transform.translation.y = 0.0;
-  //   t.transform.translation.z = 0.0;
-
-  //   t.transform.rotation.x = slerp_.Qx;
-  //   t.transform.rotation.y = slerp_.Qy;
-  //   t.transform.rotation.z = slerp_.Qz;
-  //   t.transform.rotation.w = slerp_.Qw;
-  //   tf_broadcaster_->sendTransform(t);
-  // }
 } // namespace imu_ahrs
 
 int main(int argc, char *argv[])

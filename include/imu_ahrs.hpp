@@ -19,7 +19,7 @@
 #include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 // #include <geometry_msgs/msg/transform_stamped.hpp>
-
+#include <cmath>
 #include <slerp.hpp>
 
 #include "mahony/MahonyAHRS.h"
@@ -55,12 +55,19 @@ namespace imu_ahrs
 
     sensor_msgs::msg::Imu imu_msg;
 
+    int warming_up;
+
     double ax = 0, ay = 0, az = 0;
     double gx = 0, gy = 0, gz = 0;
     double mx = 0, my = 0, mz = 0;
-    
+
+    bool use_linear_acc;
     bool yaw_initialized_ = false;
     double initial_yaw_ = 0.0;
+
+    double gbx = 0, gby = 0, gbz = 0;
+    size_t gbN = 0;
+    bool bias_locked = false;
   };
 
 } // namespace imu_ahrs
